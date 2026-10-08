@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Our Shelf</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="theme-color" content="#EEE7D8">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Our Shelf">
+<script>
+/* Paint the last-used person's colour before anything renders, so a dark profile never flashes cream. */
+(function () {
+  try {
+    var c = localStorage.getItem('ourshelf-pwa:theme');
+    if (c && /^#[0-9a-fA-F]{6}$/.test(c)) {
+      document.documentElement.style.setProperty('--bg', c);
+      document.querySelector('meta[name="theme-color"]').setAttribute('content', c);
+    }
+  } catch (e) {}
+})();
+</script>
+<style>
+:root { --bg: #EEE7D8; }
+html, body { margin: 0; height: 100%; background: var(--bg); overflow: hidden; }
+#shell {
+  position: fixed; inset: 0; box-sizing: border-box; background: var(--bg);
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+}
+#app { width: 100%; height: 100%; border: 0; display: block; opacity: 0; transition: opacity .18s ease; }
+.ready #app { opacity: 1; }
+#splash {
+  position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+  font: 500 15px/1.4 Georgia, 'Times New Roman', serif; color: #6B5B4B; text-align: center; padding: 24px;
+}
+#splash img { width: 72px; height: 72px; border-radius: 16px; }
+.ready #splash { display: none; }
+#splash button { font: inherit; padding: 8px 18px; border-radius: 999px; border: 1px solid #6B5B4B; background: transparent; color: inherit; }
+#slow { display: none; }
+</style>
+</head>
+<body>
+<div id="shell"><iframe id="app" title="Our Shelf"
+  allow="microphone; camera; clipboard-write; clipboard-read; geolocation; fullscreen; screen-wake-lock; autoplay"></iframe></div>
+<div id="splash">
+  <img src="icon-192.png" alt="">
+  <div id="msg">Opening Our Shelf</div>
+  <div id="slow"><button type="button" id="reload">Reload</button></div>
+</div>
+<script>
+/* Paste your deployed Apps Script web app URL (ends in /exec) here. */
+var APP_URL = 'https://script.google.com/macros/s/AKfycbw2nDuSpYvPfEjMPNAJMiBYdW1dzlfFlkbdspC1cAON2qWID3lbfcz4osdS6mB8OfVFYg/exec';
+
+(function () {
+  var frame = document.getElementById('app');
+  var slowTimer = null;
+
+  if (APP_URL.indexOf('https:') !== 0) {
+    document.getElementById('msg').textContent = 'Set APP_URL in index.html to your Apps Script web app link.';
+    return;
+  }
+
+  /* Forward Android share-sheet params to the app, then clear them so a reload doesn't re-trigger the prompt. */
+  var q = new URLSearchParams(location.search);
+  var fwd = new URLSearchParams();
+  ['sharedTitle', 'sharedText', 'sharedUrl'].forEach(function (k) { if (q.get(k)) fwd.set(k, q.get(k)); });
+  var qs = fwd.toString();
+  if (location.search) history.replaceState(null, '', location.pathname);
+
+  function load() {
+    document.body.classList.remove('ready');
+    document.getElementById('slow').style.display = 'none';
+    frame.src = APP_URL + (qs ? (APP_URL.indexOf('?') > -1 ? '&' : '?') + qs : '');
+    clearTimeout(slowTimer);
+    slowTimer = setTimeout(function () {
+      document.getElementById('msg').textContent = 'Taking longer than usual.';
+      document.getElementById('slow').style.display = 'block';
+    }, 12000);
+  }
+
+  frame.addEventListener('load', function () {
+    clearTimeout(slowTimer);
+    document.body.classList.add('ready');
+  });
+  document.getElementById('reload').addEventListener('click', function () { qs = ''; load(); });
+  window.addEventListener('online', function () {
+    if (!document.body.classList.contains('ready')) load();
+  });
+
+  /* The app reports the active person's theme colour so the status bar and edges match. */
+  window.addEventListener('message', function (e) {
+    var c = e.data && e.data.ourShelfTheme;
+    if (typeof c !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(c)) return;
+    try {
+      var host = new URL(e.origin).hostname;
+      if (!/(^|\.)(googleusercontent|google)\.com$/.test(host)) return;
+    } catch (err) { return; }
+    document.documentElement.style.setProperty('--bg', c);
+    document.querySelector('meta[name="theme-color"]').setAttribute('content', c);
+    try { localStorage.setItem('ourshelf-pwa:theme', c); } catch (err) {}
+  });
+
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function () {});
+  load();
+})();
+</script>
+</body>
+</html>
